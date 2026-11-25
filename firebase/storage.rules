@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isWorkspaceMember(workspaceId) {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
+    }
+
+    function hasWorkspaceRole(workspaceId, roles) {
+      return isWorkspaceMember(workspaceId)
+        && firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.role in roles;
+    }
+
+    match /users/{userId}/avatar/{fileName} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.size <= 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
+    }
+
+    match /workspaces/{workspaceId}/logo/{fileName} {
+      allow read: if isWorkspaceMember(workspaceId);
+      allow write: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
+        && request.resource.size <= 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
+    }
+
+    match /workspaces/{workspaceId}/projects/{projectId}/tasks/{taskId}/{fileName} {
+      allow read: if isWorkspaceMember(workspaceId);
+      allow write: if isWorkspaceMember(workspaceId)
+        && request.resource.size <= 10 * 1024 * 1024
+        && (
+          request.resource.contentType.matches('image/.*')
+          || request.resource.contentType == 'application/pdf'
+          || request.resource.contentType.matches('text/.*')
+          || request.resource.contentType.matches('application/vnd\\..*')
+        );
+    }
+  }
+}

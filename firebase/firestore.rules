@@ -1,0 +1,194 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function workspaceMemberPath(workspaceId) {
+      return /databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid);
+    }
+
+    function isWorkspaceMember(workspaceId) {
+      return isSignedIn() && exists(workspaceMemberPath(workspaceId));
+    }
+
+    function workspaceRole(workspaceId) {
+      return get(workspaceMemberPath(workspaceId)).data.role;
+    }
+
+    function hasWorkspaceRole(workspaceId, roles) {
+      return isWorkspaceMember(workspaceId) && workspaceRole(workspaceId) in roles;
+    }
+
+    function projectPath(workspaceId, projectId) {
+      return /databases/$(database)/documents/workspaces/$(workspaceId)/projects/$(projectId);
+    }
+
+    function isProjectMember(workspaceId, projectId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/projects/$(projectId)/members/$(request.auth.uid));
+    }
+
+    function projectRole(workspaceId, projectId) {
+      return get(/databases/$(database)/documents/workspaces/$(workspaceId)/projects/$(projectId)/members/$(request.auth.uid)).data.role;
+    }
+
+    function canAccessProject(workspaceId, projectId) {
+      let project = get(projectPath(workspaceId, projectId)).data;
+      return hasWorkspaceRole(workspaceId, ['owner', 'admin'])
+        || (isWorkspaceMember(workspaceId)
+            && (project.visibility == 'workspace' || isProjectMember(workspaceId, projectId)));
+    }
+
+    function canEditProjectTasks(workspaceId, projectId) {
+      let project = get(projectPath(workspaceId, projectId)).data;
+      return hasWorkspaceRole(workspaceId, ['owner', 'admin'])
+        || (isWorkspaceMember(workspaceId)
+            && ((project.visibility == 'workspace' && !isProjectMember(workspaceId, projectId))
+                || (isProjectMember(workspaceId, projectId) && projectRole(workspaceId, projectId) in ['lead', 'editor'])));
+    }
+
+    // Collection group rules for memberships, invitations, and cross-project tasks
+    match /{path=**}/members/{memberId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    match /{path=**}/invitations/{invitationId} {
+      allow read: if isSignedIn() && resource.data.email == request.auth.token.email;
+    }
+
+    match /{path=**}/tasks/{taskId} {
+      allow read: if isSignedIn() && isWorkspaceMember(resource.data.workspaceId);
+    }
+
+    // User profiles, notifications, and FCM devices
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.displayName.size() <= 80;
+      allow update: if isOwner(userId)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
+
+      match /notifications/{notificationId} {
+        allow read: if isOwner(userId);
+        allow update: if isOwner(userId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+          && request.resource.data.read is bool;
+        allow create, delete: if false;
+      }
+
+      match /devices/{deviceId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Workspaces & multi-tenant subcollections
+    match /workspaces/{workspaceId} {
+      allow read: if isWorkspaceMember(workspaceId);
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 60;
+      allow update: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.memberCount == resource.data.memberCount;
+      allow delete: if false; // Handled via deleteWorkspace Cloud Function
+
+      match /members/{userId} {
+        allow read: if isWorkspaceMember(workspaceId) || isOwner(userId);
+        // Only allow initial owner self-creation on workspace creation; all other mutations via Cloud Functions
+        allow create: if isOwner(userId)
+          && request.resource.data.userId == userId
+          && request.resource.data.workspaceId == workspaceId
+          && request.resource.data.role == 'owner'
+          && get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerId == userId;
+        allow update, delete: if false;
+      }
+
+      match /invitations/{invitationId} {
+        allow read: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
+          || (isSignedIn() && resource.data.email == request.auth.token.email);
+        allow write: if false; // Handled via Cloud Functions
+      }
+
+      match /projects/{projectId} {
+        allow read: if canAccessProject(workspaceId, projectId);
+        allow create: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
+          && request.resource.data.workspaceId == workspaceId
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.taskCount == 0
+          && request.resource.data.completedTaskCount == 0
+          && request.resource.data.name is string
+          && request.resource.data.name.size() >= 2
+          && request.resource.data.name.size() <= 80;
+        allow update: if (hasWorkspaceRole(workspaceId, ['owner', 'admin'])
+            || (isProjectMember(workspaceId, projectId) && projectRole(workspaceId, projectId) == 'lead'))
+          && request.resource.data.workspaceId == resource.data.workspaceId
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.taskCount == resource.data.taskCount
+          && request.resource.data.completedTaskCount == resource.data.completedTaskCount;
+        allow delete: if false; // Handled via deleteProject Cloud Function
+
+        match /members/{userId} {
+          allow read: if canAccessProject(workspaceId, projectId);
+          allow write: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
+            || (isProjectMember(workspaceId, projectId) && projectRole(workspaceId, projectId) == 'lead');
+        }
+
+        match /tasks/{taskId} {
+          allow read: if canAccessProject(workspaceId, projectId);
+          allow create: if canEditProjectTasks(workspaceId, projectId)
+            && request.resource.data.workspaceId == workspaceId
+            && request.resource.data.projectId == projectId
+            && request.resource.data.createdBy == request.auth.uid
+            && request.resource.data.title is string
+            && request.resource.data.title.size() >= 1
+            && request.resource.data.title.size() <= 160
+            && request.resource.data.priority in ['low', 'medium', 'high', 'urgent'];
+          allow update: if canEditProjectTasks(workspaceId, projectId)
+            && request.resource.data.workspaceId == resource.data.workspaceId
+            && request.resource.data.projectId == resource.data.projectId
+            && request.resource.data.createdBy == resource.data.createdBy
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.priority in ['low', 'medium', 'high', 'urgent'];
+          allow delete: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
+            || (isProjectMember(workspaceId, projectId) && projectRole(workspaceId, projectId) == 'lead')
+            || (canEditProjectTasks(workspaceId, projectId) && resource.data.createdBy == request.auth.uid);
+
+          match /comments/{commentId} {
+            allow read: if canAccessProject(workspaceId, projectId);
+            allow create: if canAccessProject(workspaceId, projectId)
+              && request.resource.data.userId == request.auth.uid
+              && request.resource.data.message is string
+              && request.resource.data.message.size() >= 1
+              && request.resource.data.message.size() <= 4000;
+            allow update: if isOwner(resource.data.userId)
+              && request.resource.data.userId == resource.data.userId
+              && request.resource.data.createdAt == resource.data.createdAt;
+            allow delete: if isOwner(resource.data.userId)
+              || hasWorkspaceRole(workspaceId, ['owner', 'admin']);
+          }
+
+          match /activity/{activityId} {
+            allow read: if canAccessProject(workspaceId, projectId);
+            allow write: if false; // Server-only audit trail
+          }
+        }
+      }
+    }
+  }
+}
