@@ -314,53 +314,70 @@ export function ProjectDetailPage() {
         </Card>
       )}
 
-      {view === 'overview' && (
-        <div className="grid gap-5 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Project Summary</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-[var(--text-secondary)]">Status</span>
-                <Badge variant="primary">{project.status.replace('_', ' ')}</Badge>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--text-secondary)]">Tasks completed</span>
-                <span className="font-semibold">
-                  {project.completedTaskCount} / {project.taskCount}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--text-secondary)]">Visibility</span>
-                <span className="capitalize">{project.visibility}</span>
-              </div>
-              {canManage && (
-                <div className="pt-3 flex items-center gap-2">
-                  <select
-                    value={project.status}
-                    onChange={(e) =>
-                      updateProject(activeWorkspaceId, project.id, {
-                        status: e.target.value as ProjectStatus,
-                      })
-                    }
-                    className="h-8 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 text-xs"
-                  >
-                    <option value="active">Active</option>
-                    <option value="on_hold">On Hold</option>
-                    <option value="completed">Completed</option>
-                    <option value="archived">Archived</option>
-                  </select>
-                  <Button size="sm" variant="destructive" onClick={handleDeleteProject}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Delete project
-                  </Button>
+      {view === 'overview' && (() => {
+        const total = tasks.length || project.taskCount;
+        const done =
+          tasks.length > 0
+            ? tasks.filter((t) => t.status === 'completed').length
+            : project.completedTaskCount;
+        const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+        return (
+          <div className="grid gap-5 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Project Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-secondary)]">Status</span>
+                  <Badge variant="primary">{project.status.replace('_', ' ')}</Badge>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-secondary)]">Tasks completed</span>
+                  <span className="font-semibold">
+                    {done} / {total} ({pct}%)
+                  </span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--bg-surface-muted)]">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${pct}%`,
+                      backgroundColor: pct === 100 ? 'var(--accent-sage)' : project.color,
+                    }}
+                  />
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-secondary)]">Visibility</span>
+                  <span className="capitalize">{project.visibility}</span>
+                </div>
+                {canManage && (
+                  <div className="pt-3 flex items-center gap-2">
+                    <select
+                      value={project.status}
+                      onChange={(e) =>
+                        updateProject(activeWorkspaceId, project.id, {
+                          status: e.target.value as ProjectStatus,
+                        })
+                      }
+                      className="h-8 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-2.5 text-xs"
+                    >
+                      <option value="active">Active</option>
+                      <option value="on_hold">On Hold</option>
+                      <option value="completed">Completed</option>
+                      <option value="archived">Archived</option>
+                    </select>
+                    <Button size="sm" variant="destructive" onClick={handleDeleteProject}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete project
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
 
       <CreateTaskDialog
         open={createTaskOpen}

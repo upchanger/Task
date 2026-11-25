@@ -310,18 +310,27 @@ export function DashboardPage({ projects }: Props) {
               <p className="text-sm text-[var(--text-muted)]">No projects created yet.</p>
             ) : (
               projects.slice(0, 5).map((p) => {
-                const pct =
-                  p.taskCount > 0 ? Math.round((p.completedTaskCount / p.taskCount) * 100) : 0;
+                const pTasks = visibleTasks.filter((t) => t.projectId === p.id);
+                const total = pTasks.length || p.taskCount;
+                const done = pTasks.length > 0
+                  ? pTasks.filter((t) => t.status === 'completed').length
+                  : p.completedTaskCount;
+                const pct = total > 0 ? Math.round((done / total) * 100) : 0;
                 return (
                   <Link key={p.id} to={`/projects/${p.id}`} className="block space-y-1.5">
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium">{p.name}</span>
-                      <span className="text-xs text-[var(--text-secondary)]">{pct}%</span>
+                      <span className="text-xs text-[var(--text-secondary)]">
+                        {done}/{total} ({pct}%)
+                      </span>
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--bg-surface-muted)]">
                       <div
-                        className="h-full rounded-full"
-                        style={{ width: `${pct}%`, backgroundColor: p.color }}
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${pct}%`,
+                          backgroundColor: pct === 100 ? 'var(--accent-sage)' : p.color,
+                        }}
                       />
                     </div>
                   </Link>

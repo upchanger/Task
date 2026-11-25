@@ -5,13 +5,14 @@ import { Archive, Calendar, FolderKanban, Plus } from 'lucide-react';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useUIStore } from '@/stores/uiStore';
 import { updateProject } from '@/services/firestore/projectService';
+import { subscribeWorkspaceTasks } from '@/services/firestore/taskService';
 import { getReadableErrorMessage } from '@/utils/errors';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { CreateProjectDialog } from './CreateProjectDialog';
 import { toast } from '@/components/shared/Toast';
-import type { Project } from '@/types/domain';
+import type { Project, TaskItem } from '@/types/domain';
 
 interface Props {
   projects: Project[];
@@ -21,8 +22,16 @@ export function ProjectsPage({ projects }: Props) {
   const navigate = useNavigate();
   const { activeWorkspaceId, getActiveRole } = useWorkspaceStore();
   const searchQuery = useUIStore((s) => s.searchQuery);
+  const [tasks, setTasks] = React.useState<TaskItem[]>([]);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [showArchived, setShowArchived] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!activeWorkspaceId) return undefined;
+    return subscribeWorkspaceTasks(activeWorkspaceId, setTasks);
+  }, [activeWorkspaceId]);
+
+  const visibleTasks = activeWorkspaceId ? tasks : [];
 
   const role = getActiveRole();
   const canManage = role === 'owner' || role === 'admin';
@@ -102,10 +111,13 @@ export function ProjectsPage({ projects }: Props) {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((project) => {
-            const pct =
-              project.taskCount > 0
-                ? Math.round((project.completedTaskCount / project.taskCount) * 100)
-                : 0;
+            const pTasks = visibleTasks.filter((t) => t.projectId === project.id);
+            const total = pTasks.length || project.taskCount;
+            const done =
+              pTasks.length > 0
+                ? pTasks.filter((t) => t.status === 'completed').length
+                : project.completedTaskCount;
+            const pct = total > 0 ? Math.round((done / total) * 100) : 0;
             return (
               <Link key={project.id} to={`/projects/${project.id}`}>
                 <Card className="h-full transition-colors hover:border-[var(--border-strong)]">
@@ -135,7 +147,7 @@ export function ProjectsPage({ projects }: Props) {
                         <div className="mb-1 flex items-center justify-between text-xs">
                           <span className="text-[var(--text-secondary)]">Progress</span>
                           <span className="font-medium">
-                            {project.completedTaskCount}/{project.taskCount} ({pct}%)
+                            {done}/{total} ({pct}%)
                           </span>
                         </div>
                         <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-surface-muted)]">
