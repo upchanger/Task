@@ -192,8 +192,7 @@ service cloud.firestore {
             && request.resource.data.title.size() <= 160
             && request.resource.data.priority in ['low', 'medium', 'high', 'urgent']
             && (!onlyOwnerCanAssign(workspaceId)
-                || hasWorkspaceRole(workspaceId, ['owner'])
-                || request.resource.data.assigneeIds.size() == 0);
+                || hasWorkspaceRole(workspaceId, ['owner']));
           allow update: if canEditProjectTasks(workspaceId, projectId)
             && request.resource.data.workspaceId == resource.data.workspaceId
             && request.resource.data.projectId == resource.data.projectId

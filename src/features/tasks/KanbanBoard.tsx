@@ -25,6 +25,7 @@ interface Props {
   projectId: string;
   statuses: ProjectStatusConfig[];
   tasks: TaskItem[];
+  canCreateTasks?: boolean;
   onAddTask: (statusId: string) => void;
   onSelectTask: (task: TaskItem) => void;
 }
@@ -32,11 +33,13 @@ interface Props {
 function KanbanColumn({
   status,
   tasks,
+  canCreateTasks = true,
   onAddTask,
   onSelectTask,
 }: {
   status: ProjectStatusConfig;
   tasks: TaskItem[];
+  canCreateTasks?: boolean;
   onAddTask: () => void;
   onSelectTask: (task: TaskItem) => void;
 }) {
@@ -63,24 +66,28 @@ function KanbanColumn({
             {tasks.length}
           </span>
         </div>
+        {canCreateTasks && (
+          <button
+            type="button"
+            onClick={onAddTask}
+            className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] cursor-pointer"
+            title={`Add task to ${status.label}`}
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {canCreateTasks && (
         <button
           type="button"
           onClick={onAddTask}
-          className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-primary)] cursor-pointer"
-          title={`Add task to ${status.label}`}
+          className="mb-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--bg-surface)]/70 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)] cursor-pointer"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3.5 w-3.5" />
+          Add new task
         </button>
-      </div>
-
-      <button
-        type="button"
-        onClick={onAddTask}
-        className="mb-2.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--bg-surface)]/70 py-1.5 text-xs font-medium text-[var(--text-secondary)] transition-colors hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)] cursor-pointer"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        Add new task
-      </button>
+      )}
 
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
         <div className="flex flex-1 flex-col gap-2.5 min-h-[120px]">
@@ -98,6 +105,7 @@ export function KanbanBoard({
   projectId,
   statuses,
   tasks,
+  canCreateTasks = true,
   onAddTask,
   onSelectTask,
 }: Props) {
@@ -198,6 +206,7 @@ export function KanbanBoard({
               key={status.id}
               status={status}
               tasks={columnTasks}
+              canCreateTasks={canCreateTasks}
               onAddTask={() => onAddTask(status.id)}
               onSelectTask={onSelectTask}
             />

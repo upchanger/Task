@@ -162,10 +162,15 @@ export function ProjectDetailPage() {
               />
             ))}
           </div>
-          <Button variant="dark" onClick={() => handleOpenCreateTask(project.statuses[0]?.id ?? 'todo')}>
-            <Plus className="h-4 w-4" />
-            Create Task
-          </Button>
+          {canAssignTasks && (
+            <Button
+              variant="dark"
+              onClick={() => handleOpenCreateTask(project.statuses[0]?.id ?? 'todo')}
+            >
+              <Plus className="h-4 w-4" />
+              Create Task
+            </Button>
+          )}
         </div>
       </div>
 
@@ -259,6 +264,7 @@ export function ProjectDetailPage() {
           projectId={project.id}
           statuses={project.statuses}
           tasks={filteredTasks}
+          canCreateTasks={canAssignTasks}
           onAddTask={handleOpenCreateTask}
           onSelectTask={(t) => setSelectedTaskId(t.id)}
         />

@@ -184,10 +184,11 @@ export function WorkspaceSettingsPage() {
             <label className="flex items-center justify-between gap-4 cursor-pointer">
               <div>
                 <p className="text-sm font-medium text-[var(--text-primary)]">
-                  Only workspace owner can assign tasks
+                  Only workspace owner can create & assign tasks
                 </p>
                 <p className="text-xs text-[var(--text-secondary)]">
-                  When enabled, admins and members cannot change task assignees.
+                  When enabled, only the workspace owner can create new tasks or change task
+                  assignees.
                 </p>
               </div>
               <input
