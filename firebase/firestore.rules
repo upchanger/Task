@@ -60,7 +60,9 @@ service cloud.firestore {
     }
 
     match /{path=**}/invitations/{invitationId} {
-      allow read: if isSignedIn() && resource.data.email == request.auth.token.email;
+      allow read: if isSignedIn()
+        && request.auth.token.email is string
+        && resource.data.email == request.auth.token.email.lower();
     }
 
     match /{path=**}/tasks/{taskId} {
@@ -118,7 +120,7 @@ service cloud.firestore {
             || (request.resource.data.invitationId is string
               && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/invitations/$(request.resource.data.invitationId))
               && get(/databases/$(database)/documents/workspaces/$(workspaceId)/invitations/$(request.resource.data.invitationId)).data.status == 'pending'
-              && get(/databases/$(database)/documents/workspaces/$(workspaceId)/invitations/$(request.resource.data.invitationId)).data.email == request.auth.token.email
+              && get(/databases/$(database)/documents/workspaces/$(workspaceId)/invitations/$(request.resource.data.invitationId)).data.email == request.auth.token.email.lower()
               && request.resource.data.role == get(/databases/$(database)/documents/workspaces/$(workspaceId)/invitations/$(request.resource.data.invitationId)).data.role)
           );
         allow update: if hasWorkspaceRole(workspaceId, ['owner'])
@@ -132,7 +134,7 @@ service cloud.firestore {
 
       match /invitations/{invitationId} {
         allow read: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
-          || (isSignedIn() && resource.data.email == request.auth.token.email);
+          || (isSignedIn() && request.auth.token.email is string && resource.data.email == request.auth.token.email.lower());
         allow create: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
           && request.resource.data.workspaceId == workspaceId
           && request.resource.data.invitedBy == request.auth.uid
@@ -141,7 +143,8 @@ service cloud.firestore {
           && request.resource.data.email is string;
         allow update: if (hasWorkspaceRole(workspaceId, ['owner', 'admin']) && request.resource.data.status == 'revoked')
           || (isSignedIn()
-              && resource.data.email == request.auth.token.email
+              && request.auth.token.email is string
+              && resource.data.email == request.auth.token.email.lower()
               && resource.data.status == 'pending'
               && request.resource.data.status in ['accepted', 'rejected']);
         allow delete: if false;

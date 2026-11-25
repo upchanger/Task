@@ -147,26 +147,40 @@ export function subscribeWorkspaceInvitations(
   const q = query(
     collection(db, 'workspaces', workspaceId, 'invitations'),
     where('status', '==', 'pending'),
-    orderBy('createdAt', 'desc'),
   );
-  return onSnapshot(q, (snap) => {
-    onData(snap.docs.map((d) => d.data() as WorkspaceInvitation));
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const list = snap.docs
+        .map((d) => d.data() as WorkspaceInvitation)
+        .sort((a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0));
+      onData(list);
+    },
+    (err) => console.error('Failed to load workspace invitations:', err),
+  );
 }
 
 export function subscribeUserPendingInvitations(
   email: string,
   onData: (invites: WorkspaceInvitation[]) => void,
+  onError?: (err: Error) => void,
 ): Unsubscribe {
   const q = query(
     collectionGroup(db, 'invitations'),
-    where('email', '==', email.toLowerCase()),
+    where('email', '==', email.trim().toLowerCase()),
     where('status', '==', 'pending'),
     orderBy('createdAt', 'desc'),
   );
-  return onSnapshot(q, (snap) => {
-    onData(snap.docs.map((d) => d.data() as WorkspaceInvitation));
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      onData(snap.docs.map((d) => d.data() as WorkspaceInvitation));
+    },
+    (err) => {
+      console.error('Failed to load invitations:', err);
+      onError?.(err);
+    },
+  );
 }
 
 export async function sendWorkspaceInvite(payload: {

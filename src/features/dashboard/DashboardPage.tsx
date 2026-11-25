@@ -14,21 +14,29 @@ import {
 } from 'recharts';
 import {
   AlertCircle,
+  Check,
   CheckCircle2,
   Clock,
   FolderKanban,
   ListTodo,
   Plus,
   Sparkles,
+  X,
 } from 'lucide-react';
 import { subscribeWorkspaceTasks } from '@/services/firestore/taskService';
+import {
+  respondWorkspaceInvite,
+  subscribeUserPendingInvitations,
+} from '@/services/firestore/workspaceService';
 import { useAuthStore } from '@/stores/authStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { getReadableErrorMessage } from '@/utils/errors';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { CreateWorkspaceDialog } from '@/features/workspaces/CreateWorkspaceDialog';
-import type { Project, TaskItem } from '@/types/domain';
+import { toast } from '@/components/shared/Toast';
+import type { Project, TaskItem, WorkspaceInvitation } from '@/types/domain';
 
 interface Props {
   projects: Project[];
@@ -36,8 +44,9 @@ interface Props {
 
 export function DashboardPage({ projects }: Props) {
   const { firebaseUser, profile } = useAuthStore();
-  const { activeWorkspaceId, memberships, loading } = useWorkspaceStore();
+  const { activeWorkspaceId, memberships, loading, setActiveWorkspaceId } = useWorkspaceStore();
   const [tasks, setTasks] = React.useState<TaskItem[]>([]);
+  const [myInvites, setMyInvites] = React.useState<WorkspaceInvitation[]>([]);
   const [createWsOpen, setCreateWsOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -45,26 +54,88 @@ export function DashboardPage({ projects }: Props) {
     return subscribeWorkspaceTasks(activeWorkspaceId, setTasks);
   }, [activeWorkspaceId]);
 
+  React.useEffect(() => {
+    if (!firebaseUser?.email) return undefined;
+    return subscribeUserPendingInvitations(firebaseUser.email, setMyInvites);
+  }, [firebaseUser?.email]);
+
+  const handleRespondInvite = async (inv: WorkspaceInvitation, action: 'accept' | 'reject') => {
+    try {
+      await respondWorkspaceInvite({
+        workspaceId: inv.workspaceId,
+        invitationId: inv.id,
+        action,
+      });
+      if (action === 'accept') {
+        setActiveWorkspaceId(inv.workspaceId);
+      }
+      toast.success(action === 'accept' ? 'Joined workspace' : 'Invitation declined');
+    } catch (err) {
+      toast.error('Action failed', getReadableErrorMessage(err));
+    }
+  };
+
   const visibleTasks = activeWorkspaceId ? tasks : [];
 
   if (!loading && memberships.length === 0) {
     return (
-      <div className="mx-auto max-w-xl py-16 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-primary-soft)] text-[var(--accent-primary)]">
-          <Sparkles className="h-7 w-7" />
+      <div className="mx-auto max-w-xl py-12 space-y-6">
+        {myInvites.length > 0 && (
+          <Card className="border-[var(--accent-primary)]/40 bg-[var(--accent-primary-soft)]/40 text-left">
+            <CardHeader>
+              <CardTitle>Workspace invitations</CardTitle>
+              <CardDescription>You have been invited to collaborate.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2.5">
+              {myInvites.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3"
+                >
+                  <div>
+                    <p className="text-sm font-semibold">{inv.workspaceName}</p>
+                    <p className="text-xs text-[var(--text-secondary)]">
+                      Invited by {inv.invitedByName} as{' '}
+                      <span className="capitalize">{inv.role}</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleRespondInvite(inv, 'reject')}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Decline
+                    </Button>
+                    <Button size="sm" onClick={() => handleRespondInvite(inv, 'accept')}>
+                      <Check className="h-3.5 w-3.5" />
+                      Accept
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-primary-soft)] text-[var(--accent-primary)]">
+            <Sparkles className="h-7 w-7" />
+          </div>
+          <h1 className="font-display text-2xl font-bold">
+            Welcome to CollabTask, {profile?.displayName?.split(' ')[0] ?? 'there'}
+          </h1>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
+            Create your first workspace to invite teammates, launch projects, and collaborate in real
+            time.
+          </p>
+          <Button className="mt-6" size="lg" onClick={() => setCreateWsOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Create your first workspace
+          </Button>
+          <CreateWorkspaceDialog open={createWsOpen} onClose={() => setCreateWsOpen(false)} />
         </div>
-        <h1 className="font-display text-2xl font-bold">
-          Welcome to CollabTask, {profile?.displayName?.split(' ')[0] ?? 'there'}
-        </h1>
-        <p className="mt-2 text-sm text-[var(--text-secondary)]">
-          Create your first workspace to invite teammates, launch projects, and collaborate in real
-          time.
-        </p>
-        <Button className="mt-6" size="lg" onClick={() => setCreateWsOpen(true)}>
-          <Plus className="h-4 w-4" />
-          Create your first workspace
-        </Button>
-        <CreateWorkspaceDialog open={createWsOpen} onClose={() => setCreateWsOpen(false)} />
       </div>
     );
   }
