@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Camera, Trash2 } from 'lucide-react';
@@ -19,6 +20,7 @@ import { toast } from '@/components/shared/Toast';
 import type { Workspace } from '@/types/domain';
 
 export function WorkspaceSettingsPage() {
+  const navigate = useNavigate();
   const { activeWorkspaceId, getActiveRole } = useWorkspaceStore();
   const [workspace, setWorkspace] = React.useState<Workspace | null>(null);
   const [uploading, setUploading] = React.useState(false);
@@ -82,6 +84,7 @@ export function WorkspaceSettingsPage() {
     try {
       await deleteWorkspaceById(activeWorkspaceId);
       toast.success('Workspace deleted');
+      navigate('/', { replace: true });
     } catch (err) {
       toast.error('Delete failed', getReadableErrorMessage(err));
     } finally {

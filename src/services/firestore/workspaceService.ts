@@ -305,5 +305,66 @@ export async function removeWorkspaceMember(payload: {
 }
 
 export async function deleteWorkspaceById(workspaceId: string): Promise<void> {
-  await deleteDoc(doc(db, 'workspaces', workspaceId));
+  const user = auth.currentUser;
+  if (!user) throw new Error('You must be signed in.');
+
+  // 1. Delete projects and their tasks/subcollections
+  const projectsSnap = await getDocs(collection(db, 'workspaces', workspaceId, 'projects'));
+  for (const projDoc of projectsSnap.docs) {
+    const tasksSnap = await getDocs(
+      collection(db, 'workspaces', workspaceId, 'projects', projDoc.id, 'tasks'),
+    );
+    for (const taskDoc of tasksSnap.docs) {
+      const commentsSnap = await getDocs(
+        collection(
+          db,
+          'workspaces',
+          workspaceId,
+          'projects',
+          projDoc.id,
+          'tasks',
+          taskDoc.id,
+          'comments',
+        ),
+      );
+      if (!commentsSnap.empty) {
+        const b = writeBatch(db);
+        commentsSnap.docs.forEach((c) => b.delete(c.ref));
+        await b.commit();
+      }
+      await deleteDoc(taskDoc.ref);
+    }
+
+    const projMembersSnap = await getDocs(
+      collection(db, 'workspaces', workspaceId, 'projects', projDoc.id, 'members'),
+    );
+    if (!projMembersSnap.empty) {
+      const b = writeBatch(db);
+      projMembersSnap.docs.forEach((m) => b.delete(m.ref));
+      await b.commit();
+    }
+    await deleteDoc(projDoc.ref);
+  }
+
+  // 2. Delete invitations
+  const invitesSnap = await getDocs(collection(db, 'workspaces', workspaceId, 'invitations'));
+  if (!invitesSnap.empty) {
+    const b = writeBatch(db);
+    invitesSnap.docs.forEach((inv) => b.delete(inv.ref));
+    await b.commit();
+  }
+
+  // 3. Delete all non-owner members first, then owner's member doc + workspace doc
+  const membersSnap = await getDocs(collection(db, 'workspaces', workspaceId, 'members'));
+  const otherMembers = membersSnap.docs.filter((m) => m.id !== user.uid);
+  if (otherMembers.length > 0) {
+    const b = writeBatch(db);
+    otherMembers.forEach((m) => b.delete(m.ref));
+    await b.commit();
+  }
+
+  const finalBatch = writeBatch(db);
+  finalBatch.delete(doc(db, 'workspaces', workspaceId, 'members', user.uid));
+  finalBatch.delete(doc(db, 'workspaces', workspaceId));
+  await finalBatch.commit();
 }
