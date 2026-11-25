@@ -15,7 +15,7 @@ import {
   updateProject,
 } from '@/services/firestore/projectService';
 import { subscribeProjectTasks } from '@/services/firestore/taskService';
-import { subscribeWorkspaceMembers } from '@/services/firestore/workspaceService';
+import { subscribeWorkspace, subscribeWorkspaceMembers } from '@/services/firestore/workspaceService';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useUIStore } from '@/stores/uiStore';
 import { getReadableErrorMessage } from '@/utils/errors';
@@ -27,7 +27,14 @@ import { KanbanBoard } from '@/features/tasks/KanbanBoard';
 import { CreateTaskDialog } from '@/features/tasks/CreateTaskDialog';
 import { TaskDetailDrawer } from '@/features/tasks/TaskDetailDrawer';
 import { toast } from '@/components/shared/Toast';
-import type { Project, ProjectStatus, TaskItem, TaskPriority, WorkspaceMember } from '@/types/domain';
+import type {
+  Project,
+  ProjectStatus,
+  TaskItem,
+  TaskPriority,
+  Workspace,
+  WorkspaceMember,
+} from '@/types/domain';
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -36,6 +43,7 @@ export function ProjectDetailPage() {
   const searchQuery = useUIStore((s) => s.searchQuery);
 
   const [project, setProject] = React.useState<Project | null>(null);
+  const [workspace, setWorkspace] = React.useState<Workspace | null>(null);
   const [tasks, setTasks] = React.useState<TaskItem[]>([]);
   const [members, setMembers] = React.useState<WorkspaceMember[]>([]);
   const [view, setView] = React.useState<'board' | 'list' | 'overview'>('board');
@@ -48,16 +56,19 @@ export function ProjectDetailPage() {
 
   const role = getActiveRole();
   const canManage = role === 'owner' || role === 'admin';
+  const canAssignTasks = !workspace?.onlyOwnerCanAssign || role === 'owner';
 
   React.useEffect(() => {
     if (!activeWorkspaceId || !projectId) return;
     const u1 = subscribeProject(activeWorkspaceId, projectId, setProject);
     const u2 = subscribeProjectTasks(activeWorkspaceId, projectId, setTasks);
     const u3 = subscribeWorkspaceMembers(activeWorkspaceId, setMembers);
+    const u4 = subscribeWorkspace(activeWorkspaceId, setWorkspace);
     return () => {
       u1();
       u2();
       u3();
+      u4();
     };
   }, [activeWorkspaceId, projectId]);
 
@@ -351,6 +362,7 @@ export function ProjectDetailPage() {
         statuses={project.statuses}
         members={members}
         nextOrder={(tasks.length + 1) * 1000}
+        canAssignTasks={canAssignTasks}
       />
 
       <TaskDetailDrawer
@@ -358,6 +370,7 @@ export function ProjectDetailPage() {
         onClose={() => setSelectedTaskId(null)}
         statuses={project.statuses}
         members={members}
+        canAssignTasks={canAssignTasks}
       />
     </div>
   );

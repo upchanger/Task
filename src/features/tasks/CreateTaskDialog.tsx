@@ -21,6 +21,7 @@ interface Props {
   statuses: ProjectStatusConfig[];
   members: WorkspaceMember[];
   nextOrder: number;
+  canAssignTasks?: boolean;
 }
 
 export function CreateTaskDialog({
@@ -33,6 +34,7 @@ export function CreateTaskDialog({
   statuses,
   members,
   nextOrder,
+  canAssignTasks = true,
 }: Props) {
   const firebaseUser = useAuthStore((s) => s.firebaseUser);
   const [selectedAssignees, setSelectedAssignees] = React.useState<string[]>([]);
@@ -164,25 +166,31 @@ export function CreateTaskDialog({
             <label className="mb-1.5 block text-xs font-medium text-[var(--text-secondary)]">
               Assignees
             </label>
-            <div className="flex flex-wrap gap-2">
-              {members.map((m) => {
-                const selected = selectedAssignees.includes(m.userId);
-                return (
-                  <button
-                    key={m.userId}
-                    type="button"
-                    onClick={() => toggleAssignee(m.userId)}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${
-                      selected
-                        ? 'border-[var(--accent-primary)] bg-[var(--accent-primary-soft)] text-[var(--accent-primary)]'
-                        : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-muted)]'
-                    }`}
-                  >
-                    {m.displayName}
-                  </button>
-                );
-              })}
-            </div>
+            {canAssignTasks ? (
+              <div className="flex flex-wrap gap-2">
+                {members.map((m) => {
+                  const selected = selectedAssignees.includes(m.userId);
+                  return (
+                    <button
+                      key={m.userId}
+                      type="button"
+                      onClick={() => toggleAssignee(m.userId)}
+                      className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${
+                        selected
+                          ? 'border-[var(--accent-primary)] bg-[var(--accent-primary-soft)] text-[var(--accent-primary)]'
+                          : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-muted)]'
+                      }`}
+                    >
+                      {m.displayName}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--text-muted)]">
+                Only the workspace owner can assign tasks.
+              </p>
+            )}
           </div>
         )}
 

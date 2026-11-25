@@ -43,9 +43,10 @@ interface Props {
   onClose: () => void;
   statuses: ProjectStatusConfig[];
   members: WorkspaceMember[];
+  canAssignTasks?: boolean;
 }
 
-export function TaskDetailDrawer({ task, onClose, statuses, members }: Props) {
+export function TaskDetailDrawer({ task, onClose, statuses, members, canAssignTasks = true }: Props) {
   if (!task) return null;
   return (
     <TaskDetailDrawerBody
@@ -54,6 +55,7 @@ export function TaskDetailDrawer({ task, onClose, statuses, members }: Props) {
       onClose={onClose}
       statuses={statuses}
       members={members}
+      canAssignTasks={canAssignTasks}
     />
   );
 }
@@ -63,6 +65,7 @@ function TaskDetailDrawerBody({
   onClose,
   statuses,
   members,
+  canAssignTasks = true,
 }: Omit<Props, 'task'> & { task: TaskItem }) {
   const { firebaseUser, profile } = useAuthStore();
   const [comments, setComments] = React.useState<TaskComment[]>([]);
@@ -304,7 +307,14 @@ function TaskDetailDrawerBody({
 
           {/* Assignees */}
           <div>
-            <p className="mb-2 text-xs font-semibold text-[var(--text-secondary)]">Assignees</p>
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold text-[var(--text-secondary)]">Assignees</p>
+              {!canAssignTasks && (
+                <span className="text-[11px] text-[var(--text-muted)]">
+                  Owner-only assignment enabled
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap gap-1.5">
               {members.map((m) => {
                 const assigned = task.assigneeIds.includes(m.userId);
@@ -312,8 +322,11 @@ function TaskDetailDrawerBody({
                   <button
                     key={m.userId}
                     type="button"
+                    disabled={!canAssignTasks}
                     onClick={() => handleToggleAssignee(m)}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors cursor-pointer ${
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                      canAssignTasks ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'
+                    } ${
                       assigned
                         ? 'border-[var(--accent-primary)] bg-[var(--accent-primary-soft)] text-[var(--accent-primary)] font-medium'
                         : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:bg-[var(--bg-surface-muted)]'

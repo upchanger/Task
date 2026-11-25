@@ -26,6 +26,10 @@ service cloud.firestore {
       return isWorkspaceMember(workspaceId) && workspaceRole(workspaceId) in roles;
     }
 
+    function onlyOwnerCanAssign(workspaceId) {
+      return get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.get('onlyOwnerCanAssign', false) == true;
+    }
+
     function projectPath(workspaceId, projectId) {
       return /databases/$(database)/documents/workspaces/$(workspaceId)/projects/$(projectId);
     }
@@ -186,13 +190,20 @@ service cloud.firestore {
             && request.resource.data.title is string
             && request.resource.data.title.size() >= 1
             && request.resource.data.title.size() <= 160
-            && request.resource.data.priority in ['low', 'medium', 'high', 'urgent'];
+            && request.resource.data.priority in ['low', 'medium', 'high', 'urgent']
+            && (!onlyOwnerCanAssign(workspaceId)
+                || hasWorkspaceRole(workspaceId, ['owner'])
+                || request.resource.data.assigneeIds.size() == 0);
           allow update: if canEditProjectTasks(workspaceId, projectId)
             && request.resource.data.workspaceId == resource.data.workspaceId
             && request.resource.data.projectId == resource.data.projectId
             && request.resource.data.createdBy == resource.data.createdBy
             && request.resource.data.createdAt == resource.data.createdAt
-            && request.resource.data.priority in ['low', 'medium', 'high', 'urgent'];
+            && request.resource.data.priority in ['low', 'medium', 'high', 'urgent']
+            && (!onlyOwnerCanAssign(workspaceId)
+                || hasWorkspaceRole(workspaceId, ['owner'])
+                || (request.resource.data.assigneeIds == resource.data.assigneeIds
+                    && request.resource.data.assigneeSummaries == resource.data.assigneeSummaries));
           allow delete: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
             || (isProjectMember(workspaceId, projectId) && projectRole(workspaceId, projectId) == 'lead')
             || (canEditProjectTasks(workspaceId, projectId) && resource.data.createdBy == request.auth.uid);

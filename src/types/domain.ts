@@ -50,6 +50,7 @@ export interface Workspace {
   logoURL: string | null;
   ownerId: string;
   memberCount: number;
+  onlyOwnerCanAssign?: boolean;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

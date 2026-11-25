@@ -7,6 +7,7 @@ import {
   deleteWorkspaceById,
   subscribeWorkspace,
   updateWorkspaceDetails,
+  updateWorkspaceTaskPolicy,
   uploadWorkspaceLogo,
 } from '@/services/firestore/workspaceService';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
@@ -172,6 +173,40 @@ export function WorkspaceSettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      {isOwner && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Task permissions</CardTitle>
+            <CardDescription>Control who can assign or reassign tasks in this workspace.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <label className="flex items-center justify-between gap-4 cursor-pointer">
+              <div>
+                <p className="text-sm font-medium text-[var(--text-primary)]">
+                  Only workspace owner can assign tasks
+                </p>
+                <p className="text-xs text-[var(--text-secondary)]">
+                  When enabled, admins and members cannot change task assignees.
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={Boolean(workspace.onlyOwnerCanAssign)}
+                onChange={async (e) => {
+                  try {
+                    await updateWorkspaceTaskPolicy(activeWorkspaceId, e.target.checked);
+                    toast.success('Task assignment policy updated');
+                  } catch (err) {
+                    toast.error('Update failed', getReadableErrorMessage(err));
+                  }
+                }}
+                className="h-4 w-4 accent-[var(--accent-primary)]"
+              />
+            </label>
+          </CardContent>
+        </Card>
+      )}
 
       {isOwner && (
         <Card className="border-[var(--accent-coral)]/40">

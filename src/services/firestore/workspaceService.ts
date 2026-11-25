@@ -81,6 +81,16 @@ export async function updateWorkspaceDetails(
   });
 }
 
+export async function updateWorkspaceTaskPolicy(
+  workspaceId: string,
+  onlyOwnerCanAssign: boolean,
+): Promise<void> {
+  await updateDoc(doc(db, 'workspaces', workspaceId), {
+    onlyOwnerCanAssign,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function uploadWorkspaceLogo(workspaceId: string, file: File): Promise<string> {
   if (file.size > 2 * 1024 * 1024) {
     throw new Error('Logo image must be 2 MB or smaller.');
