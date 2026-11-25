@@ -70,9 +70,15 @@ export function AppShell({ projects, unreadCount, onCreateProjectClick }: AppShe
 
   React.useEffect(() => {
     if (!firebaseUser) return;
-    const unsub = subscribeUserWorkspaces(firebaseUser.uid, (memberships) => {
-      setMemberships(memberships);
-    });
+    const unsub = subscribeUserWorkspaces(
+      firebaseUser.uid,
+      (memberships) => {
+        setMemberships(memberships);
+      },
+      (err) => {
+        console.error('Failed to load workspaces:', err);
+      },
+    );
     return () => unsub();
   }, [firebaseUser, setMemberships]);
 
