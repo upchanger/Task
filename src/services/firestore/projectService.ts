@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   orderBy,
@@ -10,8 +11,7 @@ import {
   updateDoc,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '@/services/firebase/app';
+import { db } from '@/services/firebase/app';
 import type { Project, ProjectStatus, ProjectStatusConfig, ProjectVisibility } from '@/types/domain';
 
 export const DEFAULT_PROJECT_STATUSES: ProjectStatusConfig[] = [
@@ -109,9 +109,5 @@ export async function updateProject(
 }
 
 export async function deleteProjectById(workspaceId: string, projectId: string): Promise<void> {
-  const fn = httpsCallable<{ workspaceId: string; projectId: string }, void>(
-    functions,
-    'deleteProject',
-  );
-  await fn({ workspaceId, projectId });
+  await deleteDoc(doc(db, 'workspaces', workspaceId, 'projects', projectId));
 }

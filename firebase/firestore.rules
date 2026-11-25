@@ -103,25 +103,48 @@ service cloud.firestore {
         && request.resource.data.name.size() <= 60;
       allow update: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
         && request.resource.data.ownerId == resource.data.ownerId
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.memberCount == resource.data.memberCount;
-      allow delete: if false; // Handled via deleteWorkspace Cloud Function
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if hasWorkspaceRole(workspaceId, ['owner']);
 
       match /members/{userId} {
         allow read: if isWorkspaceMember(workspaceId) || isOwner(userId);
-        // Only allow initial owner self-creation on workspace creation; all other mutations via Cloud Functions
+        // Allow initial owner self-creation OR accepting a valid pending invitation with matching email & role
         allow create: if isOwner(userId)
           && request.resource.data.userId == userId
           && request.resource.data.workspaceId == workspaceId
-          && request.resource.data.role == 'owner'
-          && get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerId == userId;
-        allow update, delete: if false;
+          && (
+            (request.resource.data.role == 'owner'
+              && get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerId == userId)
+            || (request.resource.data.invitationId is string
+              && exists(/databases/$(database)/documents/workspaces/$(workspaceId)/invitations/$(request.resource.data.invitationId))
+              && get(/databases/$(database)/documents/workspaces/$(workspaceId)/invitations/$(request.resource.data.invitationId)).data.status == 'pending'
+              && get(/databases/$(database)/documents/workspaces/$(workspaceId)/invitations/$(request.resource.data.invitationId)).data.email == request.auth.token.email
+              && request.resource.data.role == get(/databases/$(database)/documents/workspaces/$(workspaceId)/invitations/$(request.resource.data.invitationId)).data.role)
+          );
+        allow update: if hasWorkspaceRole(workspaceId, ['owner'])
+          && userId != request.auth.uid
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.workspaceId == resource.data.workspaceId
+          && request.resource.data.role in ['owner', 'admin', 'member'];
+        allow delete: if (hasWorkspaceRole(workspaceId, ['owner']) && resource.data.role != 'owner')
+          || (hasWorkspaceRole(workspaceId, ['admin']) && resource.data.role == 'member');
       }
 
       match /invitations/{invitationId} {
         allow read: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
           || (isSignedIn() && resource.data.email == request.auth.token.email);
-        allow write: if false; // Handled via Cloud Functions
+        allow create: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
+          && request.resource.data.workspaceId == workspaceId
+          && request.resource.data.invitedBy == request.auth.uid
+          && request.resource.data.status == 'pending'
+          && request.resource.data.role in ['admin', 'member']
+          && request.resource.data.email is string;
+        allow update: if (hasWorkspaceRole(workspaceId, ['owner', 'admin']) && request.resource.data.status == 'revoked')
+          || (isSignedIn()
+              && resource.data.email == request.auth.token.email
+              && resource.data.status == 'pending'
+              && request.resource.data.status in ['accepted', 'rejected']);
+        allow delete: if false;
       }
 
       match /projects/{projectId} {
@@ -141,7 +164,7 @@ service cloud.firestore {
           && request.resource.data.createdAt == resource.data.createdAt
           && request.resource.data.taskCount == resource.data.taskCount
           && request.resource.data.completedTaskCount == resource.data.completedTaskCount;
-        allow delete: if false; // Handled via deleteProject Cloud Function
+        allow delete: if hasWorkspaceRole(workspaceId, ['owner', 'admin']);
 
         match /members/{userId} {
           allow read: if canAccessProject(workspaceId, projectId);

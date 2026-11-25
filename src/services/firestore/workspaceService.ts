@@ -1,19 +1,24 @@
 import {
   collection,
   collectionGroup,
+  deleteDoc,
   doc,
+  getDoc,
+  getDocs,
+  increment,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
+  Timestamp,
   updateDoc,
   where,
+  writeBatch,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import { db, functions, storage } from '@/services/firebase/app';
+import { auth, db, storage } from '@/services/firebase/app';
 import type {
   UserProfile,
   Workspace,
@@ -169,9 +174,40 @@ export async function sendWorkspaceInvite(payload: {
   email: string;
   role: Exclude<WorkspaceRole, 'owner'>;
 }): Promise<{ invitationId: string }> {
-  const fn = httpsCallable<typeof payload, { invitationId: string }>(functions, 'sendInvite');
-  const res = await fn(payload);
-  return res.data;
+  const user = auth.currentUser;
+  if (!user) throw new Error('You must be signed in to send an invitation.');
+
+  const normalizedEmail = payload.email.trim().toLowerCase();
+  const existingSnap = await getDocs(
+    query(
+      collection(db, 'workspaces', payload.workspaceId, 'invitations'),
+      where('email', '==', normalizedEmail),
+      where('status', '==', 'pending'),
+    ),
+  );
+  if (!existingSnap.empty) {
+    throw new Error('A pending invitation already exists for this email.');
+  }
+
+  const wsSnap = await getDoc(doc(db, 'workspaces', payload.workspaceId));
+  const workspaceName = wsSnap.exists() ? (wsSnap.data().name as string) : 'Workspace';
+  const invRef = doc(collection(db, 'workspaces', payload.workspaceId, 'invitations'));
+  const expiresAt = Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+
+  await setDoc(invRef, {
+    id: invRef.id,
+    workspaceId: payload.workspaceId,
+    workspaceName,
+    email: normalizedEmail,
+    role: payload.role,
+    status: 'pending',
+    invitedBy: user.uid,
+    invitedByName: user.displayName || user.email || 'Teammate',
+    createdAt: serverTimestamp(),
+    expiresAt,
+  });
+
+  return { invitationId: invRef.id };
 }
 
 export async function respondWorkspaceInvite(payload: {
@@ -179,16 +215,52 @@ export async function respondWorkspaceInvite(payload: {
   invitationId: string;
   action: 'accept' | 'reject';
 }): Promise<void> {
-  const fn = httpsCallable<typeof payload, void>(functions, 'respondInvite');
-  await fn(payload);
+  const user = auth.currentUser;
+  if (!user) throw new Error('You must be signed in.');
+
+  const invRef = doc(db, 'workspaces', payload.workspaceId, 'invitations', payload.invitationId);
+  if (payload.action === 'reject') {
+    await updateDoc(invRef, { status: 'rejected' });
+    return;
+  }
+
+  const [invSnap, wsSnap] = await Promise.all([
+    getDoc(invRef),
+    getDoc(doc(db, 'workspaces', payload.workspaceId)),
+  ]);
+  if (!invSnap.exists()) throw new Error('Invitation not found.');
+  const inv = invSnap.data() as WorkspaceInvitation;
+  const wsData = wsSnap.exists() ? wsSnap.data() : {};
+
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'workspaces', payload.workspaceId, 'members', user.uid), {
+    userId: user.uid,
+    workspaceId: payload.workspaceId,
+    workspaceName: (wsData.name as string) || inv.workspaceName,
+    workspaceLogoURL: (wsData.logoURL as string | null) ?? null,
+    role: inv.role,
+    invitationId: payload.invitationId,
+    displayName: user.displayName || user.email || 'Team Member',
+    email: (user.email || inv.email).toLowerCase(),
+    photoURL: user.photoURL ?? null,
+    joinedAt: serverTimestamp(),
+  });
+  batch.update(invRef, { status: 'accepted' });
+  await batch.commit();
+
+  await updateDoc(doc(db, 'workspaces', payload.workspaceId), {
+    memberCount: increment(1),
+    updatedAt: serverTimestamp(),
+  }).catch(() => {});
 }
 
 export async function revokeWorkspaceInvite(payload: {
   workspaceId: string;
   invitationId: string;
 }): Promise<void> {
-  const fn = httpsCallable<typeof payload, void>(functions, 'revokeInvite');
-  await fn(payload);
+  await updateDoc(doc(db, 'workspaces', payload.workspaceId, 'invitations', payload.invitationId), {
+    status: 'revoked',
+  });
 }
 
 export async function updateWorkspaceMemberRole(payload: {
@@ -196,19 +268,22 @@ export async function updateWorkspaceMemberRole(payload: {
   targetUserId: string;
   role: WorkspaceRole;
 }): Promise<void> {
-  const fn = httpsCallable<typeof payload, void>(functions, 'updateMemberRole');
-  await fn(payload);
+  await updateDoc(doc(db, 'workspaces', payload.workspaceId, 'members', payload.targetUserId), {
+    role: payload.role,
+  });
 }
 
 export async function removeWorkspaceMember(payload: {
   workspaceId: string;
   targetUserId: string;
 }): Promise<void> {
-  const fn = httpsCallable<typeof payload, void>(functions, 'removeMember');
-  await fn(payload);
+  await deleteDoc(doc(db, 'workspaces', payload.workspaceId, 'members', payload.targetUserId));
+  await updateDoc(doc(db, 'workspaces', payload.workspaceId), {
+    memberCount: increment(-1),
+    updatedAt: serverTimestamp(),
+  }).catch(() => {});
 }
 
 export async function deleteWorkspaceById(workspaceId: string): Promise<void> {
-  const fn = httpsCallable<{ workspaceId: string }, void>(functions, 'deleteWorkspace');
-  await fn({ workspaceId });
+  await deleteDoc(doc(db, 'workspaces', workspaceId));
 }

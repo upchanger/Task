@@ -172,7 +172,10 @@ export function MembersPage() {
         <Card>
           <CardHeader>
             <CardTitle>Invite a teammate</CardTitle>
-            <CardDescription>Send an invitation by email to join this workspace.</CardDescription>
+            <CardDescription>
+              Invite by their sign-in email. They will see and accept the invitation on their Team
+              Members page.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit(onInvite)} className="flex flex-col gap-3 sm:flex-row">
