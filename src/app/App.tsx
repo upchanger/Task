@@ -20,9 +20,12 @@ import { WorkspaceSettingsPage } from '@/features/workspaces/WorkspaceSettingsPa
 import { NotificationsPage } from '@/features/notifications/NotificationsPage';
 import { ProfilePage } from '@/features/profile/ProfilePage';
 import { subscribeWorkspaceProjects } from '@/services/firestore/projectService';
+import { subscribeWorkspace } from '@/services/firestore/workspaceService';
 import { subscribeNotifications } from '@/services/notifications/notificationService';
 import { useAuthStore } from '@/stores/authStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { deleteDoc, doc } from 'firebase/firestore';
+import { db } from '@/services/firebase/app';
 import type { AppNotification, Project } from '@/types/domain';
 
 function AuthenticatedWorkspaceRoutes() {
@@ -36,7 +39,24 @@ function AuthenticatedWorkspaceRoutes() {
 
   React.useEffect(() => {
     if (!activeWorkspaceId || !firebaseUser) return undefined;
-    return subscribeWorkspaceProjects(activeWorkspaceId, firebaseUser.uid, activeRole, setProjects);
+    const unsubProj = subscribeWorkspaceProjects(
+      activeWorkspaceId,
+      firebaseUser.uid,
+      activeRole,
+      setProjects,
+    );
+    const unsubWs = subscribeWorkspace(activeWorkspaceId, (ws) => {
+      if (!ws) {
+        // Clean up orphaned member record if workspace was deleted
+        deleteDoc(doc(db, 'workspaces', activeWorkspaceId, 'members', firebaseUser.uid)).catch(
+          () => {},
+        );
+      }
+    });
+    return () => {
+      unsubProj();
+      unsubWs();
+    };
   }, [activeWorkspaceId, firebaseUser, activeRole]);
 
   React.useEffect(() => {

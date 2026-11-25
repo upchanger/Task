@@ -133,7 +133,8 @@ service cloud.firestore {
           && request.resource.data.workspaceId == resource.data.workspaceId
           && request.resource.data.role in ['owner', 'admin', 'member'];
         allow delete: if hasWorkspaceRole(workspaceId, ['owner'])
-          || (hasWorkspaceRole(workspaceId, ['admin']) && resource.data.role == 'member');
+          || (hasWorkspaceRole(workspaceId, ['admin']) && resource.data.role == 'member')
+          || (isOwner(userId) && !exists(/databases/$(database)/documents/workspaces/$(workspaceId)));
       }
 
       match /invitations/{invitationId} {

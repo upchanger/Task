@@ -2,6 +2,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -10,6 +11,7 @@ import {
   Timestamp,
   updateDoc,
   where,
+  writeBatch,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/services/firebase/app';
@@ -158,5 +160,38 @@ export async function updateProject(
 }
 
 export async function deleteProjectById(workspaceId: string, projectId: string): Promise<void> {
+  const tasksSnap = await getDocs(
+    collection(db, 'workspaces', workspaceId, 'projects', projectId, 'tasks'),
+  );
+  for (const taskDoc of tasksSnap.docs) {
+    const commentsSnap = await getDocs(
+      collection(
+        db,
+        'workspaces',
+        workspaceId,
+        'projects',
+        projectId,
+        'tasks',
+        taskDoc.id,
+        'comments',
+      ),
+    );
+    if (!commentsSnap.empty) {
+      const b = writeBatch(db);
+      commentsSnap.docs.forEach((c) => b.delete(c.ref));
+      await b.commit();
+    }
+    await deleteDoc(taskDoc.ref);
+  }
+
+  const projMembersSnap = await getDocs(
+    collection(db, 'workspaces', workspaceId, 'projects', projectId, 'members'),
+  );
+  if (!projMembersSnap.empty) {
+    const b = writeBatch(db);
+    projMembersSnap.docs.forEach((m) => b.delete(m.ref));
+    await b.commit();
+  }
+
   await deleteDoc(doc(db, 'workspaces', workspaceId, 'projects', projectId));
 }
