@@ -16,6 +16,7 @@ import {
 } from '@/services/firestore/projectService';
 import { subscribeProjectTasks } from '@/services/firestore/taskService';
 import { subscribeWorkspace, subscribeWorkspaceMembers } from '@/services/firestore/workspaceService';
+import { useAuthStore } from '@/stores/authStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useUIStore } from '@/stores/uiStore';
 import { getReadableErrorMessage } from '@/utils/errors';
@@ -39,6 +40,7 @@ import type {
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const firebaseUser = useAuthStore((s) => s.firebaseUser);
   const { activeWorkspaceId, getActiveRole } = useWorkspaceStore();
   const searchQuery = useUIStore((s) => s.searchQuery);
 
@@ -264,6 +266,8 @@ export function ProjectDetailPage() {
           projectId={project.id}
           statuses={project.statuses}
           tasks={filteredTasks}
+          currentUserId={firebaseUser?.uid}
+          isWorkspaceOwner={role === 'owner'}
           canCreateTasks={canAssignTasks}
           onAddTask={handleOpenCreateTask}
           onSelectTask={(t) => setSelectedTaskId(t.id)}

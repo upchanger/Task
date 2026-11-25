@@ -202,7 +202,11 @@ service cloud.firestore {
             && (!onlyOwnerCanAssign(workspaceId)
                 || hasWorkspaceRole(workspaceId, ['owner'])
                 || (request.resource.data.assigneeIds == resource.data.assigneeIds
-                    && request.resource.data.assigneeSummaries == resource.data.assigneeSummaries));
+                    && request.resource.data.assigneeSummaries == resource.data.assigneeSummaries))
+            && ((request.resource.data.status == resource.data.status
+                    && request.resource.data.order == resource.data.order)
+                || hasWorkspaceRole(workspaceId, ['owner'])
+                || request.auth.uid in resource.data.assigneeIds);
           allow delete: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
             || (isProjectMember(workspaceId, projectId) && projectRole(workspaceId, projectId) == 'lead')
             || (canEditProjectTasks(workspaceId, projectId) && resource.data.createdBy == request.auth.uid);

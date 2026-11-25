@@ -25,6 +25,8 @@ interface Props {
   projectId: string;
   statuses: ProjectStatusConfig[];
   tasks: TaskItem[];
+  currentUserId?: string;
+  isWorkspaceOwner?: boolean;
   canCreateTasks?: boolean;
   onAddTask: (statusId: string) => void;
   onSelectTask: (task: TaskItem) => void;
@@ -33,12 +35,14 @@ interface Props {
 function KanbanColumn({
   status,
   tasks,
+  canDragTask,
   canCreateTasks = true,
   onAddTask,
   onSelectTask,
 }: {
   status: ProjectStatusConfig;
   tasks: TaskItem[];
+  canDragTask: (task: TaskItem) => boolean;
   canCreateTasks?: boolean;
   onAddTask: () => void;
   onSelectTask: (task: TaskItem) => void;
@@ -92,7 +96,12 @@ function KanbanColumn({
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
         <div className="flex flex-1 flex-col gap-2.5 min-h-[120px]">
           {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onClick={() => onSelectTask(task)} />
+            <TaskCard
+              key={task.id}
+              task={task}
+              canDrag={canDragTask(task)}
+              onClick={() => onSelectTask(task)}
+            />
           ))}
         </div>
       </SortableContext>
@@ -105,10 +114,17 @@ export function KanbanBoard({
   projectId,
   statuses,
   tasks,
+  currentUserId,
+  isWorkspaceOwner = false,
   canCreateTasks = true,
   onAddTask,
   onSelectTask,
 }: Props) {
+  const canDragTask = React.useCallback(
+    (task: TaskItem) =>
+      isWorkspaceOwner || (Boolean(currentUserId) && task.assigneeIds.includes(currentUserId!)),
+    [isWorkspaceOwner, currentUserId],
+  );
   const [optimisticMove, setOptimisticMove] = React.useState<{
     id: string;
     status: string;
@@ -147,7 +163,7 @@ export function KanbanBoard({
     if (!over) return;
 
     const dragged = optimisticTasks.find((t) => t.id === active.id);
-    if (!dragged) return;
+    if (!dragged || !canDragTask(dragged)) return;
 
     const overId = String(over.id);
     const overColumn = sortedStatuses.find((s) => s.id === overId);
@@ -206,6 +222,7 @@ export function KanbanBoard({
               key={status.id}
               status={status}
               tasks={columnTasks}
+              canDragTask={canDragTask}
               canCreateTasks={canCreateTasks}
               onAddTask={() => onAddTask(status.id)}
               onSelectTask={onSelectTask}

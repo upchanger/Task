@@ -9,6 +9,7 @@ import type { TaskItem, TaskPriority } from '@/types/domain';
 
 interface Props {
   task: TaskItem;
+  canDrag?: boolean;
   onClick: () => void;
 }
 
@@ -22,10 +23,11 @@ const PRIORITY_BADGE: Record<
   urgent: { label: 'Urgent', variant: 'coral' },
 };
 
-export function TaskCard({ task, onClick }: Props) {
+export function TaskCard({ task, canDrag = true, onClick }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { task },
+    disabled: !canDrag,
   });
 
   const style = {
