@@ -219,7 +219,7 @@ export function AppShell({ projects, unreadCount, onCreateProjectClick }: AppShe
                   {profile?.displayName ?? 'Team Member'}
                 </p>
                 <p className="truncate text-[11px] text-[var(--text-muted)]">
-                  {profile?.jobTitle || activeRole || 'Member'}
+                  {profile?.jobTitle || activeRole || 'No workspace'}
                 </p>
               </div>
             )}
