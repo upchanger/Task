@@ -9,10 +9,17 @@ import {
   setDoc,
   Timestamp,
   updateDoc,
+  where,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/services/firebase/app';
-import type { Project, ProjectStatus, ProjectStatusConfig, ProjectVisibility } from '@/types/domain';
+import type {
+  Project,
+  ProjectStatus,
+  ProjectStatusConfig,
+  ProjectVisibility,
+  WorkspaceRole,
+} from '@/types/domain';
 
 export const DEFAULT_PROJECT_STATUSES: ProjectStatusConfig[] = [
   { id: 'todo', label: 'To Do', color: '#93877D', order: 0, category: 'todo' },
@@ -23,15 +30,57 @@ export const DEFAULT_PROJECT_STATUSES: ProjectStatusConfig[] = [
 
 export function subscribeWorkspaceProjects(
   workspaceId: string,
+  userId: string,
+  role: WorkspaceRole | null,
   onData: (projects: Project[]) => void,
 ): Unsubscribe {
-  const q = query(
-    collection(db, 'workspaces', workspaceId, 'projects'),
-    orderBy('createdAt', 'desc'),
+  const projectsCol = collection(db, 'workspaces', workspaceId, 'projects');
+
+  if (role === 'owner' || role === 'admin') {
+    const q = query(projectsCol, orderBy('createdAt', 'desc'));
+    return onSnapshot(
+      q,
+      (snap) => onData(snap.docs.map((d) => d.data() as Project)),
+      (err) => console.error('Failed to load workspace projects:', err),
+    );
+  }
+
+  // For 'member' role, query workspace-visible and member-specific private projects separately
+  // so Firestore list security rules can validate each query statically.
+  let publicProjects: Project[] = [];
+  let privateProjects: Project[] = [];
+
+  const emitMerged = () => {
+    const byId = new Map<string, Project>();
+    [...publicProjects, ...privateProjects].forEach((p) => byId.set(p.id, p));
+    const merged = Array.from(byId.values()).sort(
+      (a, b) => (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0),
+    );
+    onData(merged);
+  };
+
+  const unsubPublic = onSnapshot(
+    query(projectsCol, where('visibility', '==', 'workspace')),
+    (snap) => {
+      publicProjects = snap.docs.map((d) => d.data() as Project);
+      emitMerged();
+    },
+    (err) => console.error('Failed to load workspace projects:', err),
   );
-  return onSnapshot(q, (snap) => {
-    onData(snap.docs.map((d) => d.data() as Project));
-  });
+
+  const unsubPrivate = onSnapshot(
+    query(projectsCol, where('memberIds', 'array-contains', userId)),
+    (snap) => {
+      privateProjects = snap.docs.map((d) => d.data() as Project);
+      emitMerged();
+    },
+    (err) => console.error('Failed to load private projects:', err),
+  );
+
+  return () => {
+    unsubPublic();
+    unsubPrivate();
+  };
 }
 
 export function subscribeProject(

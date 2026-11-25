@@ -151,7 +151,9 @@ service cloud.firestore {
       }
 
       match /projects/{projectId} {
-        allow read: if canAccessProject(workspaceId, projectId);
+        allow read: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
+          || (isWorkspaceMember(workspaceId) && resource.data.visibility == 'workspace')
+          || (isWorkspaceMember(workspaceId) && request.auth.uid in resource.data.memberIds);
         allow create: if hasWorkspaceRole(workspaceId, ['owner', 'admin'])
           && request.resource.data.workspaceId == workspaceId
           && request.resource.data.createdBy == request.auth.uid

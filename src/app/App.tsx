@@ -29,14 +29,15 @@ function AuthenticatedWorkspaceRoutes() {
   const navigate = useNavigate();
   const firebaseUser = useAuthStore((s) => s.firebaseUser);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const activeRole = useWorkspaceStore((s) => s.getActiveRole());
   const [projects, setProjects] = React.useState<Project[]>([]);
   const [notifications, setNotifications] = React.useState<AppNotification[]>([]);
   const [createProjectOpen, setCreateProjectOpen] = React.useState(false);
 
   React.useEffect(() => {
-    if (!activeWorkspaceId) return undefined;
-    return subscribeWorkspaceProjects(activeWorkspaceId, setProjects);
-  }, [activeWorkspaceId]);
+    if (!activeWorkspaceId || !firebaseUser) return undefined;
+    return subscribeWorkspaceProjects(activeWorkspaceId, firebaseUser.uid, activeRole, setProjects);
+  }, [activeWorkspaceId, firebaseUser, activeRole]);
 
   React.useEffect(() => {
     if (!firebaseUser) return undefined;
