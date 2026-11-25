@@ -238,20 +238,16 @@ export async function respondWorkspaceInvite(payload: {
     return;
   }
 
-  const [invSnap, wsSnap] = await Promise.all([
-    getDoc(invRef),
-    getDoc(doc(db, 'workspaces', payload.workspaceId)),
-  ]);
+  const invSnap = await getDoc(invRef);
   if (!invSnap.exists()) throw new Error('Invitation not found.');
   const inv = invSnap.data() as WorkspaceInvitation;
-  const wsData = wsSnap.exists() ? wsSnap.data() : {};
 
   const batch = writeBatch(db);
   batch.set(doc(db, 'workspaces', payload.workspaceId, 'members', user.uid), {
     userId: user.uid,
     workspaceId: payload.workspaceId,
-    workspaceName: (wsData.name as string) || inv.workspaceName,
-    workspaceLogoURL: (wsData.logoURL as string | null) ?? null,
+    workspaceName: inv.workspaceName,
+    workspaceLogoURL: null,
     role: inv.role,
     invitationId: payload.invitationId,
     displayName: user.displayName || user.email || 'Team Member',
