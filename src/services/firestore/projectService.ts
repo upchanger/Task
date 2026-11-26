@@ -1,4 +1,6 @@
 import {
+  arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
@@ -17,9 +19,12 @@ import {
 import { db } from '@/services/firebase/app';
 import type {
   Project,
+  ProjectMember,
+  ProjectRole,
   ProjectStatus,
   ProjectStatusConfig,
   ProjectVisibility,
+  WorkspaceMember,
   WorkspaceRole,
 } from '@/types/domain';
 
@@ -157,6 +162,70 @@ export async function updateProject(
   }
 
   await updateDoc(doc(db, 'workspaces', workspaceId, 'projects', projectId), payload);
+}
+
+export function subscribeProjectMembers(
+  workspaceId: string,
+  projectId: string,
+  onData: (members: ProjectMember[]) => void,
+): Unsubscribe {
+  const q = query(
+    collection(db, 'workspaces', workspaceId, 'projects', projectId, 'members'),
+    orderBy('addedAt', 'asc'),
+  );
+  return onSnapshot(q, (snap) => {
+    onData(snap.docs.map((d) => d.data() as ProjectMember));
+  });
+}
+
+export async function addProjectMember(
+  workspaceId: string,
+  projectId: string,
+  member: WorkspaceMember,
+  role: ProjectRole = 'editor',
+): Promise<void> {
+  const batch = writeBatch(db);
+  batch.set(
+    doc(db, 'workspaces', workspaceId, 'projects', projectId, 'members', member.userId),
+    {
+      userId: member.userId,
+      role,
+      displayName: member.displayName,
+      photoURL: member.photoURL,
+      addedAt: serverTimestamp(),
+    },
+  );
+  batch.update(doc(db, 'workspaces', workspaceId, 'projects', projectId), {
+    memberIds: arrayUnion(member.userId),
+    updatedAt: serverTimestamp(),
+  });
+  await batch.commit();
+}
+
+export async function updateProjectMemberRole(
+  workspaceId: string,
+  projectId: string,
+  userId: string,
+  role: ProjectRole,
+): Promise<void> {
+  await updateDoc(
+    doc(db, 'workspaces', workspaceId, 'projects', projectId, 'members', userId),
+    { role },
+  );
+}
+
+export async function removeProjectMember(
+  workspaceId: string,
+  projectId: string,
+  userId: string,
+): Promise<void> {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'workspaces', workspaceId, 'projects', projectId, 'members', userId));
+  batch.update(doc(db, 'workspaces', workspaceId, 'projects', projectId), {
+    memberIds: arrayRemove(userId),
+    updatedAt: serverTimestamp(),
+  });
+  await batch.commit();
 }
 
 export async function deleteProjectById(workspaceId: string, projectId: string): Promise<void> {
